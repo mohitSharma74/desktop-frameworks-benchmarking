@@ -1,0 +1,13 @@
+{
+  "name": "desktop-frameworks-benchmarking",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Benchmark identical desktop apps across Electron, Electrobun, and Tauri.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dataset:generate": "node scripts/generate-benchmark-dataset.mjs"
+  }
+}
+

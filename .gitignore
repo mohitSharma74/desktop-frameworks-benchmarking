@@ -1,0 +1,11 @@
+node_modules
+dist
+build
+target
+.DS_Store
+*.log
+coverage
+apps/*/dist
+apps/*/build
+apps/*/target
+
