@@ -17,6 +17,8 @@
     "electrobun:package": "bun run --cwd apps/electrobun package",
     "tauri:dev": "npm --workspace @benchmark/tauri-app run dev",
     "tauri:build": "npm --workspace @benchmark/tauri-app run build",
-    "tauri:package": "npm --workspace @benchmark/tauri-app run package"
+    "tauri:package": "npm --workspace @benchmark/tauri-app run package",
+    "benchmark:run": "node scripts/run-benchmark.mjs",
+    "benchmark:report": "node scripts/report-benchmark-results.mjs"
   }
 }

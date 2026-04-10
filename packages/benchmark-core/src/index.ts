@@ -9,6 +9,7 @@ export const BENCHMARK_EVENTS = [
 export type BenchmarkEventName = (typeof BENCHMARK_EVENTS)[number];
 
 export type BenchmarkFramework = "electron" | "electrobun" | "tauri";
+export type BenchmarkAutomationMode = "startup" | "heavy-task";
 
 export interface StartupMetrics {
   mainStarted?: number;
@@ -45,5 +46,11 @@ export interface BenchmarkResult {
 }
 
 export const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
+export const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
+export const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
 export const DEFAULT_HEAVY_TASK_ITERATIONS = 30;
 
+export interface BenchmarkAutomationConfig {
+  mode: BenchmarkAutomationMode;
+  delayMs: number;
+}

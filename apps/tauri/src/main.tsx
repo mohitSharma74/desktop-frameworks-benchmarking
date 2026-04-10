@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 const host: AppShellHost = {
   framework: "tauri",
+  getBenchmarkConfig: () => invoke("get_benchmark_config"),
   getMockApiBaseUrl: () => invoke<string>("get_mock_api_base_url"),
   loadDatasetText: () => invoke<string>("load_dataset_text"),
   readPersistedState: () => invoke<PersistedAppState | null>("read_persisted_state"),
@@ -26,4 +27,3 @@ const host: AppShellHost = {
 };
 
 createRoot(document.getElementById("root")!).render(<BenchmarkDesktopApp host={host} />);
-

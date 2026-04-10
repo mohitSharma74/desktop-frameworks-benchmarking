@@ -3,10 +3,11 @@ import {
   useDeferredValue,
   useEffect,
   useEffectEvent,
+  useRef,
   useState
 } from "react";
 
-import type { BenchmarkEventName } from "@benchmark/benchmark-core";
+import type { BenchmarkAutomationConfig, BenchmarkEventName } from "@benchmark/benchmark-core";
 import type { BenchmarkDataset, DatasetItem, MockApiResponse } from "@benchmark/dataset";
 import { filterItems, runHeavyTask, type FilterOptions, type HeavyTaskSummary } from "@benchmark/workload";
 
@@ -54,6 +55,7 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
   const [datasetBytes, setDatasetBytes] = useState(0);
   const [bootError, setBootError] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
+  const [benchmarkConfig, setBenchmarkConfig] = useState<BenchmarkAutomationConfig | null>(null);
   const [filters, setFilters] = useState<FilterOptions>(DEFAULT_FILTERS);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
@@ -63,6 +65,7 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
   const [runningTask, setRunningTask] = useState(false);
   const [taskError, setTaskError] = useState<string | null>(null);
   const [lastStorageWriteAt, setLastStorageWriteAt] = useState<string | null>(null);
+  const automationTriggeredRef = useRef(false);
 
   const deferredFilters = useDeferredValue(filters);
   const visibleItems = dataset ? filterItems(dataset.items, deferredFilters) : [];
@@ -95,14 +98,14 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
       const bootStartedAt = performance.now();
 
       try {
-        const [datasetText, persistedState, apiBaseUrl] = await Promise.all([
+        const [resolvedBenchmarkConfig, resolvedDatasetText, resolvedPersistedState, resolvedApiBaseUrl] = await Promise.all([
+          host.getBenchmarkConfig(),
           host.loadDatasetText(),
           host.readPersistedState(),
           host.getMockApiBaseUrl()
         ]);
-
-        const response = await fetch(`${apiBaseUrl}/api/dashboard`);
-        const parsedDataset = safeJsonParse<BenchmarkDataset>(datasetText);
+        const response = await fetch(`${resolvedApiBaseUrl}/api/dashboard`);
+        const parsedDataset = safeJsonParse<BenchmarkDataset>(resolvedDatasetText);
         const parsedApiResponse = (await response.json()) as MockApiResponse;
 
         if (cancelled) {
@@ -111,22 +114,24 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
 
         setDataset(parsedDataset);
         setMockApiResponse(parsedApiResponse);
-        setDatasetBytes(datasetText.length);
+        setDatasetBytes(resolvedDatasetText.length);
+        setBenchmarkConfig(resolvedBenchmarkConfig);
 
-        if (persistedState) {
+        if (resolvedPersistedState) {
           setFilters({
             ...DEFAULT_FILTERS,
-            ...persistedState.filters
+            ...resolvedPersistedState.filters
           });
-          setSelectedItemId(persistedState.selectedItemId);
-          setNotes(persistedState.notes);
-          setOpenedFiles(persistedState.lastOpenedFiles);
+          setSelectedItemId(resolvedPersistedState.selectedItemId);
+          setNotes(resolvedPersistedState.notes);
+          setOpenedFiles(resolvedPersistedState.lastOpenedFiles);
         }
 
         setBooting(false);
         emitBenchmarkEvent("bench:ready", {
-          datasetBytes: datasetText.length,
+          datasetBytes: resolvedDatasetText.length,
           itemCount: parsedDataset.itemCount,
+          automationMode: resolvedBenchmarkConfig?.mode ?? null,
           bootDurationMs: Number((performance.now() - bootStartedAt).toFixed(2))
         });
 
@@ -149,6 +154,22 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
       cancelled = true;
     };
   }, [emitBenchmarkEvent, host]);
+
+  useEffect(() => {
+    if (!dataset || booting || benchmarkConfig?.mode !== "heavy-task" || automationTriggeredRef.current) {
+      return;
+    }
+
+    automationTriggeredRef.current = true;
+
+    const handle = window.setTimeout(() => {
+      void handleRunHeavyTask();
+    }, benchmarkConfig.delayMs);
+
+    return () => {
+      window.clearTimeout(handle);
+    };
+  }, [benchmarkConfig, booting, dataset]);
 
   useEffect(() => {
     if (!dataset || booting) {

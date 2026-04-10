@@ -19,6 +19,7 @@ const electrobunRpc = electrobun.rpc!;
 
 const host: AppShellHost = {
   framework: "electrobun",
+  getBenchmarkConfig: () => electrobunRpc.request.getBenchmarkConfig({}),
   getMockApiBaseUrl: () => electrobunRpc.request.getMockApiBaseUrl({}),
   loadDatasetText: () => electrobunRpc.request.loadDatasetText({}),
   readPersistedState: () =>

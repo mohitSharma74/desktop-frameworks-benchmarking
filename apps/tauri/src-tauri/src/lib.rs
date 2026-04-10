@@ -14,6 +14,13 @@ struct AppState {
     mock_api_base_url: Mutex<String>,
 }
 
+#[derive(serde::Serialize)]
+struct BenchmarkAutomationConfig {
+    mode: String,
+    #[serde(rename = "delayMs")]
+    delay_ms: u64,
+}
+
 fn round_duration(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
@@ -30,6 +37,20 @@ fn persistence_file_path(app: &AppHandle) -> tauri::Result<PathBuf> {
 
 fn benchmark_output_file() -> Option<PathBuf> {
     std::env::var("BENCH_OUTPUT_FILE").ok().map(PathBuf::from)
+}
+
+fn benchmark_config() -> Option<BenchmarkAutomationConfig> {
+    let mode = std::env::var("BENCH_AUTOMATION_MODE").ok()?;
+    if mode != "startup" && mode != "heavy-task" {
+        return None;
+    }
+
+    let delay_ms = std::env::var("BENCH_AUTOMATION_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(250);
+
+    Some(BenchmarkAutomationConfig { mode, delay_ms })
 }
 
 fn append_benchmark_log(payload: Value, started_at: &std::time::Instant) -> tauri::Result<()> {
@@ -123,6 +144,11 @@ fn start_mock_api_server(app: &AppHandle, state: &AppState) -> tauri::Result<()>
     });
 
     Ok(())
+}
+
+#[tauri::command]
+fn get_benchmark_config() -> Option<BenchmarkAutomationConfig> {
+    benchmark_config()
 }
 
 #[tauri::command]
@@ -249,6 +275,7 @@ pub fn run() {
             );
         })
         .invoke_handler(tauri::generate_handler![
+            get_benchmark_config,
             get_mock_api_base_url,
             load_dataset_text,
             read_persisted_state,

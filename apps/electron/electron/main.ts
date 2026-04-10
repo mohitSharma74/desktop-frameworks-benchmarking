@@ -4,8 +4,11 @@ import type { OpenDialogOptions } from "electron";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
+import type { BenchmarkAutomationConfig } from "@benchmark/benchmark-core";
 import type { MockApiResponse } from "@benchmark/dataset";
 
+const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
+const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
 const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
 const DATASET_FILE_NAME = "benchmark-dataset.json";
 const MOCK_API_FILE_NAME = "mock-api-response.json";
@@ -47,6 +50,18 @@ async function appendBenchmarkLog(payload: Record<string, unknown>): Promise<voi
   }
 
   console.log("[benchmark]", JSON.stringify(record));
+}
+
+function getBenchmarkConfig(): BenchmarkAutomationConfig | null {
+  const mode = process.env[BENCH_AUTOMATION_MODE_ENV];
+  if (mode !== "startup" && mode !== "heavy-task") {
+    return null;
+  }
+
+  return {
+    mode,
+    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250")
+  };
 }
 
 function createSecondaryWindow(): void {
@@ -150,6 +165,8 @@ async function createMainWindow(): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle("app:get-benchmark-config", async () => getBenchmarkConfig());
+
   ipcMain.handle("app:get-mock-api-base-url", async () => mockApiBaseUrl);
 
   ipcMain.handle("app:load-dataset-text", async () =>

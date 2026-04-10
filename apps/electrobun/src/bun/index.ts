@@ -3,12 +3,15 @@ import { ApplicationMenu, BrowserView, BrowserWindow, PATHS, Utils } from "elect
 import { mkdir, appendFile, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import type { BenchmarkAutomationConfig } from "@benchmark/benchmark-core";
 import type { MockApiResponse } from "@benchmark/dataset";
 import { startMockApiServer } from "@benchmark/mock-api";
 
 import type { ElectrobunBenchmarkRpc } from "../shared/rpc";
 import { secondaryWindowHtml } from "../shared/secondary-window.html";
 
+const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
+const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
 const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
 const DATASET_FILE_NAME = "benchmark-dataset.json";
 const MOCK_API_FILE_NAME = "mock-api-response.json";
@@ -54,6 +57,18 @@ async function appendBenchmarkLog(payload: Record<string, unknown>): Promise<voi
   console.log("[benchmark]", JSON.stringify(record));
 }
 
+function getBenchmarkConfig(): BenchmarkAutomationConfig | null {
+  const mode = process.env[BENCH_AUTOMATION_MODE_ENV];
+  if (mode !== "startup" && mode !== "heavy-task") {
+    return null;
+  }
+
+  return {
+    mode,
+    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250")
+  };
+}
+
 async function startLocalMockApi(): Promise<void> {
   const payloadText = await Bun.file(getBundledAssetPath(MOCK_API_FILE_NAME)).text();
   const payload = JSON.parse(payloadText) as MockApiResponse;
@@ -91,6 +106,7 @@ const browserRpc = BrowserView.defineRPC<ElectrobunBenchmarkRpc>({
   maxRequestTime: 15000,
   handlers: {
     requests: {
+      getBenchmarkConfig: async () => getBenchmarkConfig(),
       getMockApiBaseUrl: async () => mockApiBaseUrl,
       loadDatasetText: async () => Bun.file(getBundledAssetPath(DATASET_FILE_NAME)).text(),
       readPersistedState: async () => {

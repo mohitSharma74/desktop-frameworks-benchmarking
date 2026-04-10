@@ -1,4 +1,8 @@
-import type { BenchmarkEventName, BenchmarkFramework } from "@benchmark/benchmark-core";
+import type {
+  BenchmarkAutomationConfig,
+  BenchmarkEventName,
+  BenchmarkFramework
+} from "@benchmark/benchmark-core";
 import type { FilterOptions } from "@benchmark/workload";
 
 export interface PersistedAppState {
@@ -10,6 +14,7 @@ export interface PersistedAppState {
 
 export interface AppShellHost {
   framework: BenchmarkFramework;
+  getBenchmarkConfig(): Promise<BenchmarkAutomationConfig | null>;
   getMockApiBaseUrl(): Promise<string>;
   loadDatasetText(): Promise<string>;
   readPersistedState(): Promise<PersistedAppState | null>;
