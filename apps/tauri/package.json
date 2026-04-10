@@ -1,0 +1,31 @@
+{
+  "name": "@benchmark/tauri-app",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Mohit Sharma",
+  "description": "Tauri host for the desktop benchmark app.",
+  "scripts": {
+    "dev": "node ../../scripts/prepare-tauri-assets.mjs && npm exec tauri -- dev",
+    "build": "node ../../scripts/prepare-tauri-assets.mjs && npm exec vite -- build --config vite.config.ts",
+    "package": "node ../../scripts/prepare-tauri-assets.mjs && npm exec tauri -- build"
+  },
+  "dependencies": {
+    "@benchmark/app-shell": "file:../../packages/app-shell",
+    "@benchmark/benchmark-core": "file:../../packages/benchmark-core",
+    "@benchmark/dataset": "file:../../packages/dataset",
+    "@benchmark/workload": "file:../../packages/workload",
+    "@tauri-apps/api": "^2.8.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.8.0",
+    "@vitejs/plugin-react": "^5.0.2",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4"
+  }
+}
+

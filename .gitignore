@@ -12,3 +12,4 @@ apps/*/artifacts
 apps/*/release
 apps/*/resources
 apps/*/target
+src-tauri/target

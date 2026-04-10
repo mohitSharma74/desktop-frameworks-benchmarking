@@ -4,7 +4,7 @@
 
 - `apps/electron`: Electron shell plus React renderer
 - `apps/electrobun`: Electrobun Bun/runtime shell plus `views://` React renderer
-- `apps/tauri`: Tauri shell plus React renderer
+- `apps/tauri`: Tauri Rust command host plus React renderer
 
 ## Shared Packages
 

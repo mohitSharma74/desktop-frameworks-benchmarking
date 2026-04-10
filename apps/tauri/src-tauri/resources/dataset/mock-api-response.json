@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-04-09T00:00:00.000Z",
+  "summary": {
+    "totalItems": 10000,
+    "activeItems": 2000,
+    "erroredItems": 2000
+  },
+  "alerts": [
+    {
+      "id": "alert-001",
+      "severity": "info",
+      "message": "Benchmark fixture loaded successfully."
+    },
+    {
+      "id": "alert-002",
+      "severity": "warning",
+      "message": "One data segment contains synthetic error states for dashboard testing."
+    },
+    {
+      "id": "alert-003",
+      "severity": "critical",
+      "message": "This alert exists to validate severity filtering and visual treatment."
+    }
+  ]
+}

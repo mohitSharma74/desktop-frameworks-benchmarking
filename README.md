@@ -38,5 +38,6 @@ The repository now includes:
 - a local mock API server package
 - a working Electron host that builds and packages into `.app` and `.dmg`
 - a verified Electrobun host that reuses the same renderer contract
+- a Tauri host scaffold wired to the same host contract
 
-Tauri is still pending, but Electron and Electrobun now both target the same renderer and workload packages with working build/package flows.
+Electron and Electrobun have verified build/package flows. Tauri is now scaffolded against the same renderer contract and is ready for verification.

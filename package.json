@@ -14,6 +14,9 @@
     "electron:package": "npm --workspace @benchmark/electron-app run package",
     "electrobun:dev": "bun run --cwd apps/electrobun dev",
     "electrobun:build": "bun run --cwd apps/electrobun build",
-    "electrobun:package": "bun run --cwd apps/electrobun package"
+    "electrobun:package": "bun run --cwd apps/electrobun package",
+    "tauri:dev": "npm --workspace @benchmark/tauri-app run dev",
+    "tauri:build": "npm --workspace @benchmark/tauri-app run build",
+    "tauri:package": "npm --workspace @benchmark/tauri-app run package"
   }
 }

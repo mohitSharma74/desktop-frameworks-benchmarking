@@ -1,0 +1,20 @@
+[package]
+name = "desktop-framework-benchmark-tauri"
+version = "0.1.0"
+description = "Tauri host for the desktop framework benchmark app"
+authors = ["Mohit Sharma"]
+edition = "2021"
+
+[lib]
+name = "desktop_framework_benchmark_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0.3", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "2.8.5", features = [] }
+tauri-plugin-dialog = "2.2.2"
+time = { version = "0.3", features = ["formatting"] }
