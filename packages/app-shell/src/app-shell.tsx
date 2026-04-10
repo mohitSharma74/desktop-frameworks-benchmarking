@@ -144,6 +144,7 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
         });
       } catch (error) {
         if (!cancelled) {
+          console.error("[benchmark-app-shell:boot-error]", error);
           setBooting(false);
           setBootError(error instanceof Error ? error.message : "Unknown boot error");
         }

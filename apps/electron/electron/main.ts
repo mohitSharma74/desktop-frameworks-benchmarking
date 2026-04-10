@@ -1,7 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import type { OpenDialogOptions } from "electron";
 
+import { createServer } from "node:http";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import type { AddressInfo } from "node:net";
 import { dirname, join, resolve } from "node:path";
 
 import type { BenchmarkAutomationConfig } from "@benchmark/benchmark-core";
@@ -118,13 +120,45 @@ function createSecondaryWindow(): void {
 async function startMockApiServer(): Promise<void> {
   const payloadText = await readFile(getRepoAssetPath(MOCK_API_FILE_NAME), "utf8");
   const payload = JSON.parse(payloadText) as MockApiResponse;
-  const { startMockApiServer: createMockServer } = await import("@benchmark/mock-api");
-  const server = await createMockServer({
-    dashboardPayload: payload
+
+  const server = createServer((request, response) => {
+    if (request.url === "/health") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    if (request.url === "/api/dashboard") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(payload));
+      return;
+    }
+
+    response.writeHead(404, { "content-type": "application/json" });
+    response.end(JSON.stringify({ error: "not_found" }));
   });
 
-  mockApiBaseUrl = server.baseUrl;
-  closeMockApiServer = server.close;
+  await new Promise<void>((resolveStart, rejectStart) => {
+    server.once("error", rejectStart);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", rejectStart);
+      resolveStart();
+    });
+  });
+
+  const address = server.address() as AddressInfo;
+  mockApiBaseUrl = `http://127.0.0.1:${address.port}`;
+  closeMockApiServer = async () =>
+    new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => {
+        if (error) {
+          rejectClose(error);
+          return;
+        }
+
+        resolveClose();
+      });
+    });
 }
 
 async function createMainWindow(): Promise<void> {
@@ -150,6 +184,42 @@ async function createMainWindow(): Promise<void> {
   mainWindow.webContents.once("did-finish-load", () => {
     void appendBenchmarkLog({
       stage: "renderer_loaded"
+    });
+  });
+
+  mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+    void appendBenchmarkLog({
+      stage: "renderer_console",
+      level,
+      message,
+      line,
+      sourceId
+    });
+  });
+
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+    void appendBenchmarkLog({
+      stage: "did_fail_load",
+      errorCode,
+      errorDescription,
+      validatedUrl,
+      isMainFrame
+    });
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    void appendBenchmarkLog({
+      stage: "renderer_process_gone",
+      reason: details.reason,
+      exitCode: details.exitCode
+    });
+  });
+
+  mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
+    void appendBenchmarkLog({
+      stage: "preload_error",
+      preloadPath,
+      message: error.message
     });
   });
 
@@ -218,21 +288,28 @@ function registerIpcHandlers(): void {
   });
 }
 
-app.whenReady().then(async () => {
-  await appendBenchmarkLog({
-    stage: "main_started"
-  });
+app.whenReady()
+  .then(async () => {
+    await appendBenchmarkLog({
+      stage: "main_started"
+    });
 
-  await startMockApiServer();
-  registerIpcHandlers();
-  await createMainWindow();
+    await startMockApiServer();
+    registerIpcHandlers();
+    await createMainWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void createMainWindow();
-    }
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void createMainWindow();
+      }
+    });
+  })
+  .catch((error) => {
+    void appendBenchmarkLog({
+      stage: "startup_error",
+      message: error instanceof Error ? error.message : String(error)
+    });
   });
-});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
