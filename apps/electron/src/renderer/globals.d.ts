@@ -1,4 +1,4 @@
-import type { AppShellHost } from "@benchmark/app-shell/src/types";
+import type { AppShellHost } from "@benchmark/app-shell/types";
 
 declare global {
   interface Window {

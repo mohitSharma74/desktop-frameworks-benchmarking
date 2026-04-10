@@ -37,5 +37,6 @@ The repository now includes:
 - a shared React renderer with all benchmark features
 - a local mock API server package
 - a working Electron host that builds and packages into `.app` and `.dmg`
+- a verified Electrobun host that reuses the same renderer contract
 
-Electrobun and Tauri are still pending, but they can now target the same renderer and workload packages.
+Tauri is still pending, but Electron and Electrobun now both target the same renderer and workload packages with working build/package flows.

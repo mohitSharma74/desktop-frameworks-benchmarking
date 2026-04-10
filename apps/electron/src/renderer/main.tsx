@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 
-import { BenchmarkDesktopApp } from "@benchmark/app-shell/src/renderer";
+import { BenchmarkDesktopApp } from "@benchmark/app-shell/renderer";
 
 createRoot(document.getElementById("root")!).render(
   <BenchmarkDesktopApp host={window.benchmarkHost} />

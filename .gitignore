@@ -8,6 +8,7 @@ coverage
 apps/*/dist
 apps/*/dist-electron
 apps/*/build
+apps/*/artifacts
 apps/*/release
 apps/*/resources
 apps/*/target

@@ -1,0 +1,36 @@
+export const secondaryWindowHtml = `
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Benchmark Secondary Window</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(135deg, #191b24, #101117);
+        color: #f2efe8;
+        font-family: "Space Grotesk", "Avenir Next", sans-serif;
+      }
+      main {
+        max-width: 28rem;
+        padding: 2rem;
+        text-align: center;
+      }
+      p {
+        color: rgba(242, 239, 232, 0.74);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Secondary Window</h1>
+      <p>This exists so every framework opens the same extra native window during benchmarking.</p>
+    </main>
+  </body>
+</html>
+`;
+

@@ -11,6 +11,9 @@
     "dataset:generate": "node scripts/generate-benchmark-dataset.mjs",
     "electron:dev": "npm --workspace @benchmark/electron-app run dev",
     "electron:build": "npm --workspace @benchmark/electron-app run build",
-    "electron:package": "npm --workspace @benchmark/electron-app run package"
+    "electron:package": "npm --workspace @benchmark/electron-app run package",
+    "electrobun:dev": "bun run --cwd apps/electrobun dev",
+    "electrobun:build": "bun run --cwd apps/electrobun build",
+    "electrobun:package": "bun run --cwd apps/electrobun package"
   }
 }
