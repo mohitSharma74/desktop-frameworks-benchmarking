@@ -15,6 +15,8 @@ This repository benchmarks the same desktop application across Electron, Electro
 - `apps/tauri`: Tauri implementation
 - `packages/benchmark-core`: shared benchmark event names, types, and file contracts
 - `packages/dataset`: shared dataset metadata and asset locations
+- `packages/mock-api`: reusable local mock API server for host runtimes
+- `packages/app-shell`: shared React renderer for every desktop framework
 - `packages/workload`: shared search/filter and heavy task logic
 - `docs`: benchmark diary, hardware log, environment lock, and schema docs
 - `scripts`: deterministic asset generation scripts
@@ -29,5 +31,11 @@ This repository benchmarks the same desktop application across Electron, Electro
 
 ## Current Status
 
-The repository is scaffolded with the shared benchmark contract, dataset schema, and deterministic asset generation. Framework app implementations are intentionally still placeholders so we can build them against the same shared packages.
+The repository now includes:
 
+- a deterministic 10 MB-class dataset fixture
+- a shared React renderer with all benchmark features
+- a local mock API server package
+- a working Electron host that builds and packages into `.app` and `.dmg`
+
+Electrobun and Tauri are still pending, but they can now target the same renderer and workload packages.

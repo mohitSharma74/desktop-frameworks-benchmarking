@@ -1,0 +1,29 @@
+{
+  "name": "@benchmark/electron-app",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Mohit Sharma",
+  "description": "Electron host for the desktop benchmark app.",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "node ../../scripts/electron-dev.mjs",
+    "build": "node ../../scripts/prepare-electron-assets.mjs && npm exec tsc -- -p tsconfig.node.json && npm exec vite -- build --config vite.config.ts",
+    "package": "npm run build && npm exec electron-builder -- --config electron-builder.json"
+  },
+  "dependencies": {
+    "@benchmark/app-shell": "file:../../packages/app-shell",
+    "@benchmark/mock-api": "file:../../packages/mock-api",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
+    "@vitejs/plugin-react": "^5.0.2",
+    "electron": "38.0.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.4"
+  }
+}

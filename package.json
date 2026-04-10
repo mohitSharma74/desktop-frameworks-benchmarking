@@ -4,10 +4,13 @@
   "version": "0.1.0",
   "description": "Benchmark identical desktop apps across Electron, Electrobun, and Tauri.",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
-    "dataset:generate": "node scripts/generate-benchmark-dataset.mjs"
+    "dataset:generate": "node scripts/generate-benchmark-dataset.mjs",
+    "electron:dev": "npm --workspace @benchmark/electron-app run dev",
+    "electron:build": "npm --workspace @benchmark/electron-app run build",
+    "electron:package": "npm --workspace @benchmark/electron-app run package"
   }
 }
-

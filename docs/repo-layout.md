@@ -10,6 +10,8 @@
 
 - `packages/benchmark-core`: benchmark event names, metrics types, output file contract
 - `packages/dataset`: dataset asset paths and data model types
+- `packages/mock-api`: local HTTP mock API server shared by framework hosts
+- `packages/app-shell`: shared React renderer and feature implementation
 - `packages/workload`: pure workload logic shared across all implementations
 
 ## Supporting Docs
@@ -18,4 +20,3 @@
 - `docs/hardware.md`: benchmark machine record
 - `docs/diary.md`: manual benchmark notes
 - `docs/dataset-schema.md`: shared dataset definition
-

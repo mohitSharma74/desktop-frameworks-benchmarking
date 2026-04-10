@@ -1,17 +1,19 @@
 # Electron App
 
-This directory will host the Electron implementation of the benchmark app.
+This directory hosts the Electron implementation of the benchmark app.
 
-## Planned Stack
+## Stack
 
 - Electron
 - React
 - TypeScript
 - Vite
 
-## Contract
+## What Is Implemented
 
 - Use the shared dataset in `packages/dataset`
 - Use the shared workload logic in `packages/workload`
 - Emit shared benchmark events from `packages/benchmark-core`
-
+- Start a local HTTP mock API server
+- Persist renderer state through native filesystem writes
+- Expose native file picker and secondary window actions through preload IPC

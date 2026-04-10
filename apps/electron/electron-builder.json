@@ -1,0 +1,25 @@
+{
+  "appId": "com.mohitsharma.desktopframeworkbenchmark.electron",
+  "productName": "Desktop Framework Benchmark Electron",
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/dataset",
+      "to": "dataset"
+    }
+  ],
+  "mac": {
+    "category": "public.app-category.developer-tools",
+    "target": [
+      "dir",
+      "dmg"
+    ]
+  }
+}
