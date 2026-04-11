@@ -25,11 +25,19 @@ const FRAMEWORKS = {
   electrobun: {
     executable: resolve(
       repoRoot,
-      "apps/electrobun/build/stable-macos-arm64/Desktop Framework Benchmark Electrobun.app/Contents/MacOS/Desktop Framework Benchmark Electrobun"
+      "apps/electrobun/build/stable-macos-arm64/Desktop Framework Benchmark Electrobun.app/Contents/MacOS/launcher"
     ),
     appBundle: resolve(
       repoRoot,
       "apps/electrobun/build/stable-macos-arm64/Desktop Framework Benchmark Electrobun.app"
+    ),
+    bundleArchive: resolve(
+      repoRoot,
+      "apps/electrobun/build/stable-macos-arm64/DesktopFrameworkBenchmarkElectrobun.app.tar.zst"
+    ),
+    decompressor: resolve(
+      repoRoot,
+      "apps/electrobun/build/dev-macos-arm64/Desktop Framework Benchmark Electrobun-dev.app/Contents/MacOS/zig-zstd"
     ),
     distributable: resolve(
       repoRoot,
@@ -218,6 +226,54 @@ async function measurePathBytes(path) {
   return kilobytes * 1024;
 }
 
+async function resolveExecutablePath(framework) {
+  const config = FRAMEWORKS[framework];
+
+  if (framework !== "electrobun") {
+    return config.executable;
+  }
+
+  const stagedDir = resolve("/tmp", "electrobun-benchmark-stable");
+  const stagedTar = resolve(stagedDir, basename(config.bundleArchive, ".zst"));
+  const stagedAppBundle = resolve(stagedDir, "Desktop Framework Benchmark Electrobun.app");
+  const stagedExecutable = resolve(stagedAppBundle, "Contents/MacOS/launcher");
+
+  if (existsSync(stagedExecutable)) {
+    return stagedExecutable;
+  }
+
+  await rm(stagedDir, { recursive: true, force: true });
+  await mkdir(stagedDir, { recursive: true });
+
+  if (existsSync(config.appBundle)) {
+    await runCommand("cp", ["-R", config.appBundle, stagedAppBundle]);
+  } else if (existsSync(config.bundleArchive)) {
+    if (!existsSync(config.decompressor)) {
+      throw new Error(`Missing Electrobun decompressor: ${config.decompressor}`);
+    }
+
+    await runCommand(config.decompressor, [
+      "decompress",
+      "-i",
+      config.bundleArchive,
+      "-o",
+      stagedTar,
+      "--no-timing"
+    ]);
+    await runCommand("tar", ["-xf", stagedTar, "-C", stagedDir]);
+  } else {
+    throw new Error(
+      `Missing Electrobun app bundle and archive: ${config.appBundle} / ${config.bundleArchive}`
+    );
+  }
+
+  if (!existsSync(stagedExecutable)) {
+    throw new Error(`Failed to stage Electrobun executable: ${stagedExecutable}`);
+  }
+
+  return stagedExecutable;
+}
+
 function median(values) {
   if (values.length === 0) {
     return null;
@@ -273,11 +329,12 @@ async function killApp(child) {
   }
 }
 
-function launchApp({ framework, logFile, scenario, automationDelayMs }) {
+async function launchApp({ framework, logFile, scenario, automationDelayMs }) {
   const config = FRAMEWORKS[framework];
+  const executable = await resolveExecutablePath(framework);
 
-  if (!existsSync(config.executable)) {
-    throw new Error(`Missing executable for ${framework}: ${config.executable}`);
+  if (!existsSync(executable)) {
+    throw new Error(`Missing executable for ${framework}: ${executable}`);
   }
 
   const env = {
@@ -293,8 +350,8 @@ function launchApp({ framework, logFile, scenario, automationDelayMs }) {
     env.BENCH_AUTOMATION_DELAY_MS = String(automationDelayMs);
   }
 
-  const child = spawn(config.executable, [], {
-    cwd: dirname(config.executable),
+  const child = spawn(executable, [], {
+    cwd: dirname(executable),
     env,
     stdio: "ignore"
   });
@@ -314,7 +371,7 @@ function extractStartupMetrics(records) {
 
 async function performWarmup(framework, options, tempDir) {
   const logFile = resolve(tempDir, `${framework}-warmup.jsonl`);
-  const child = launchApp({
+  const child = await launchApp({
     framework,
     logFile,
     scenario: "startup",
@@ -334,9 +391,9 @@ async function performWarmup(framework, options, tempDir) {
   }
 }
 
-async function runStartupScenario(framework, options, runDir) {
-  const logFile = resolve(runDir, `${framework}-startup.jsonl`);
-  const child = launchApp({
+async function runStartupScenario(framework, options, runDir, runLabel) {
+  const logFile = resolve(runDir, `${framework}-startup-${runLabel}.jsonl`);
+  const child = await launchApp({
     framework,
     logFile,
     scenario: "startup",
@@ -361,9 +418,9 @@ async function runStartupScenario(framework, options, runDir) {
   }
 }
 
-async function runIdleMemoryScenario(framework, options, runDir) {
-  const logFile = resolve(runDir, `${framework}-idle-memory.jsonl`);
-  const child = launchApp({
+async function runIdleMemoryScenario(framework, options, runDir, runLabel) {
+  const logFile = resolve(runDir, `${framework}-idle-memory-${runLabel}.jsonl`);
+  const child = await launchApp({
     framework,
     logFile,
     scenario: "idle-memory",
@@ -404,9 +461,9 @@ async function runIdleMemoryScenario(framework, options, runDir) {
   }
 }
 
-async function runHeavyTaskScenario(framework, options, runDir) {
-  const logFile = resolve(runDir, `${framework}-heavy-task.jsonl`);
-  const child = launchApp({
+async function runHeavyTaskScenario(framework, options, runDir, runLabel) {
+  const logFile = resolve(runDir, `${framework}-heavy-task-${runLabel}.jsonl`);
+  const child = await launchApp({
     framework,
     logFile,
     scenario: "heavy-task",
@@ -479,17 +536,17 @@ async function runArtifactsScenario(framework) {
   };
 }
 
-async function runScenario(framework, options, runDir) {
+async function runScenario(framework, options, runDir, runLabel) {
   if (options.scenario === "startup") {
-    return runStartupScenario(framework, options, runDir);
+    return runStartupScenario(framework, options, runDir, runLabel);
   }
 
   if (options.scenario === "idle-memory") {
-    return runIdleMemoryScenario(framework, options, runDir);
+    return runIdleMemoryScenario(framework, options, runDir, runLabel);
   }
 
   if (options.scenario === "heavy-task") {
-    return runHeavyTaskScenario(framework, options, runDir);
+    return runHeavyTaskScenario(framework, options, runDir, runLabel);
   }
 
   if (options.scenario === "artifacts") {
@@ -529,7 +586,8 @@ async function main() {
     const runs = options.scenario === "artifacts" ? 1 : options.runs;
 
     for (let runIndex = 0; runIndex < runs; runIndex += 1) {
-      const runResult = await runScenario(framework, options, invocationDir);
+      const runLabel = `run-${runIndex + 1}`;
+      const runResult = await runScenario(framework, options, invocationDir, runLabel);
       results.push({
         framework,
         scenario: options.scenario,

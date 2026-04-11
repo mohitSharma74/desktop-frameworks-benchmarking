@@ -18,19 +18,32 @@ export async function startMockApiServer(
   options: StartMockApiServerOptions
 ): Promise<StartedMockApiServer> {
   const server = createServer((request, response) => {
+    const headers = {
+      "content-type": "application/json",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "GET, OPTIONS",
+      "access-control-allow-headers": "content-type"
+    };
+
+    if (request.method === "OPTIONS") {
+      response.writeHead(204, headers);
+      response.end();
+      return;
+    }
+
     if (request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json" });
+      response.writeHead(200, headers);
       response.end(JSON.stringify({ ok: true }));
       return;
     }
 
     if (request.url === "/api/dashboard") {
-      response.writeHead(200, { "content-type": "application/json" });
+      response.writeHead(200, headers);
       response.end(JSON.stringify(options.dashboardPayload));
       return;
     }
 
-    response.writeHead(404, { "content-type": "application/json" });
+    response.writeHead(404, headers);
     response.end(JSON.stringify({ error: "not_found" }));
   });
 
@@ -60,4 +73,3 @@ export async function startMockApiServer(
       })
   };
 }
-

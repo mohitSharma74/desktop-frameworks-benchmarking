@@ -154,7 +154,7 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
     return () => {
       cancelled = true;
     };
-  }, [emitBenchmarkEvent, host]);
+  }, [host]);
 
   useEffect(() => {
     if (!dataset || booting || benchmarkConfig?.mode !== "heavy-task" || automationTriggeredRef.current) {
@@ -189,9 +189,14 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
     return () => {
       window.clearTimeout(handle);
     };
-  }, [booting, dataset, filters, notes, openedFiles, persistState, selectedItemId]);
+  }, [booting, dataset, filters, notes, openedFiles, selectedItemId]);
 
   async function handleRunHeavyTask() {
+    if (!dataset) {
+      setTaskError("Dataset is not loaded");
+      return;
+    }
+
     setRunningTask(true);
     setTaskError(null);
     setTaskSummary(null);
@@ -203,9 +208,7 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
     const taskStartedAt = performance.now();
 
     try {
-      const datasetText = await host.loadDatasetText();
-      const parsedDataset = safeJsonParse<BenchmarkDataset>(datasetText);
-      const summary = runHeavyTask(parsedDataset);
+      const summary = runHeavyTask(dataset);
       const durationMs = Number((performance.now() - taskStartedAt).toFixed(2));
 
       setTaskSummary(summary);

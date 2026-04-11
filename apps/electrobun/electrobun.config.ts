@@ -21,9 +21,9 @@ export default {
     copy: {
       "src/mainview/index.html": "views/mainview/index.html",
       "src/mainview/index.css": "views/mainview/index.css",
+      "src/mainview/app-shell.css": "views/mainview/app-shell.css",
       "resources/dataset/benchmark-dataset.json": "views/assets/dataset/benchmark-dataset.json",
       "resources/dataset/mock-api-response.json": "views/assets/dataset/mock-api-response.json"
     }
   }
 } satisfies ElectrobunConfig;
-
