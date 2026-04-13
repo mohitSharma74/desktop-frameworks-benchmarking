@@ -49,6 +49,12 @@ function safeJsonParse<T>(value: string): T {
   return JSON.parse(value) as T;
 }
 
+function waitForTimeout(delayMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, delayMs);
+  });
+}
+
 export function BenchmarkDesktopApp({ host }: AppShellProps) {
   const [dataset, setDataset] = useState<BenchmarkDataset | null>(null);
   const [mockApiResponse, setMockApiResponse] = useState<MockApiResponse | null>(null);
@@ -202,13 +208,14 @@ export function BenchmarkDesktopApp({ host }: AppShellProps) {
     setTaskSummary(null);
     setTaskDurationMs(null);
     emitBenchmarkEvent("bench:task:start", {
-      framework: host.framework
+      framework: host.framework,
+      iterations: benchmarkConfig?.heavyTaskIterations ?? null
     });
 
-    const taskStartedAt = performance.now();
-
     try {
-      const summary = runHeavyTask(dataset);
+      await waitForTimeout(benchmarkConfig?.mode === "heavy-task" ? 100 : 0);
+      const taskStartedAt = performance.now();
+      const summary = runHeavyTask(dataset, benchmarkConfig?.heavyTaskIterations);
       const durationMs = Number((performance.now() - taskStartedAt).toFixed(2));
 
       setTaskSummary(summary);

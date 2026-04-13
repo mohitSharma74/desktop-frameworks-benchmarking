@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 
 import type { BenchmarkAutomationConfig } from "@benchmark/benchmark-core";
 import type { MockApiResponse } from "@benchmark/dataset";
+import type { PersistedAppState } from "@benchmark/app-shell/types";
 import { startMockApiServer } from "@benchmark/mock-api";
 
 import type { ElectrobunBenchmarkRpc } from "../shared/rpc";
@@ -12,6 +13,7 @@ import { secondaryWindowHtml } from "../shared/secondary-window.html";
 
 const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
 const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
+const BENCH_HEAVY_TASK_ITERATIONS_ENV = "BENCH_HEAVY_TASK_ITERATIONS";
 const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
 const DATASET_FILE_NAME = "benchmark-dataset.json";
 const MOCK_API_FILE_NAME = "mock-api-response.json";
@@ -63,9 +65,15 @@ function getBenchmarkConfig(): BenchmarkAutomationConfig | null {
     return null;
   }
 
+  const heavyTaskIterations =
+    mode === "heavy-task"
+      ? Number(process.env[BENCH_HEAVY_TASK_ITERATIONS_ENV] ?? "") || undefined
+      : undefined;
+
   return {
     mode,
-    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250")
+    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250"),
+    heavyTaskIterations
   };
 }
 
@@ -109,9 +117,9 @@ const browserRpc = BrowserView.defineRPC<ElectrobunBenchmarkRpc>({
       getBenchmarkConfig: async () => getBenchmarkConfig(),
       getMockApiBaseUrl: async () => mockApiBaseUrl,
       loadDatasetText: async () => Bun.file(getBundledAssetPath(DATASET_FILE_NAME)).text(),
-      readPersistedState: async () => {
+      readPersistedState: async (): Promise<PersistedAppState | null> => {
         try {
-          return JSON.parse(await readFile(getPersistenceFilePath(), "utf8")) as unknown;
+          return JSON.parse(await readFile(getPersistenceFilePath(), "utf8")) as PersistedAppState;
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") {
             return null;

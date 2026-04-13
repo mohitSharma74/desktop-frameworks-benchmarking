@@ -19,6 +19,8 @@ struct BenchmarkAutomationConfig {
     mode: String,
     #[serde(rename = "delayMs")]
     delay_ms: u64,
+    #[serde(rename = "heavyTaskIterations", skip_serializing_if = "Option::is_none")]
+    heavy_task_iterations: Option<usize>,
 }
 
 fn round_duration(value: f64) -> f64 {
@@ -50,7 +52,19 @@ fn benchmark_config() -> Option<BenchmarkAutomationConfig> {
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(250);
 
-    Some(BenchmarkAutomationConfig { mode, delay_ms })
+    let heavy_task_iterations = if mode == "heavy-task" {
+        std::env::var("BENCH_HEAVY_TASK_ITERATIONS")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+    } else {
+        None
+    };
+
+    Some(BenchmarkAutomationConfig {
+        mode,
+        delay_ms,
+        heavy_task_iterations,
+    })
 }
 
 fn append_benchmark_log(payload: Value, started_at: &std::time::Instant) -> tauri::Result<()> {

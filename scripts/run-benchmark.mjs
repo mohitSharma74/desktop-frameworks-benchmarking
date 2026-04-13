@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { basename, dirname, resolve } from "node:path";
@@ -67,8 +67,9 @@ const DEFAULTS = {
   launch: "cold",
   timeoutMs: 30000,
   stabilizationMs: 2000,
-  sampleIntervalMs: 500,
+  sampleIntervalMs: 100,
   automationDelayMs: 250,
+  heavyTaskIterations: null,
   outputDir: resultsRoot
 };
 
@@ -100,6 +101,9 @@ function parseArgs(argv) {
     } else if (token === "--sample-interval-ms" && next) {
       options.sampleIntervalMs = Number(next);
       index += 1;
+    } else if (token === "--heavy-task-iterations" && next) {
+      options.heavyTaskIterations = Number(next);
+      index += 1;
     } else if (token === "--output-dir" && next) {
       options.outputDir = resolve(process.cwd(), next);
       index += 1;
@@ -123,6 +127,7 @@ Options:
   --timeout-ms <number>
   --stabilization-ms <number>
   --sample-interval-ms <number>
+  --heavy-task-iterations <number>
   --output-dir <path>
 `);
 }
@@ -166,24 +171,139 @@ function getEventRecord(records, eventName) {
   return records.find((record) => record.eventName === eventName);
 }
 
-async function sampleProcess(pid) {
-  const output = await runCommand("ps", ["-o", "pid=,rss=,%cpu=,command=", "-p", String(pid)]);
-  const line = output.trim();
-  if (!line) {
-    return null;
-  }
-
-  const match = line.match(/^(\d+)\s+(\d+)\s+([0-9.]+)\s+(.*)$/);
+function parseProcessLine(line) {
+  const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+([0-9.]+)\s+(.*)$/);
   if (!match) {
     return null;
   }
 
   return {
     pid: Number(match[1]),
-    rssMb: Number((Number(match[2]) / 1024).toFixed(2)),
-    cpuPercent: Number(match[3]),
-    command: match[4]
+    ppid: Number(match[2]),
+    rssMb: Number((Number(match[3]) / 1024).toFixed(2)),
+    cpuPercent: Number(match[4]),
+    command: match[5]
   };
+}
+
+function getAppBundlePathFromExecutable(executable) {
+  const marker = ".app/";
+  const index = executable.indexOf(marker);
+  if (index === -1) {
+    return dirname(executable);
+  }
+
+  return executable.slice(0, index + ".app".length);
+}
+
+async function readProcessTable() {
+  const output = await runCommand("ps", ["-axo", "pid=,ppid=,rss=,%cpu=,command="]);
+  return output
+    .split("\n")
+    .map((line) => parseProcessLine(line))
+    .filter(Boolean);
+}
+
+function collectProcessTree(rootPid, processes) {
+  const byParent = new Map();
+  for (const process of processes) {
+    const children = byParent.get(process.ppid) ?? [];
+    children.push(process);
+    byParent.set(process.ppid, children);
+  }
+
+  const visited = new Set();
+  const queue = [rootPid];
+  const tree = [];
+
+  while (queue.length > 0) {
+    const pid = queue.shift();
+    if (!pid || visited.has(pid)) {
+      continue;
+    }
+
+    visited.add(pid);
+    const process = processes.find((entry) => entry.pid === pid);
+    if (!process) {
+      continue;
+    }
+
+    tree.push(process);
+    const children = byParent.get(pid) ?? [];
+    for (const child of children) {
+      queue.push(child.pid);
+    }
+  }
+
+  return tree;
+}
+
+function collectMatchingProcesses(processes, patterns) {
+  return processes.filter((process) =>
+    patterns.some((pattern) => process.command.includes(pattern))
+  );
+}
+
+function aggregateProcessList(processes, rootPid = null) {
+  if (processes.length === 0) {
+    return null;
+  }
+
+  const primaryProcess = [...processes].sort((left, right) => {
+    if (right.cpuPercent !== left.cpuPercent) {
+      return right.cpuPercent - left.cpuPercent;
+    }
+
+    if (right.rssMb !== left.rssMb) {
+      return right.rssMb - left.rssMb;
+    }
+
+    return left.pid - right.pid;
+  })[0];
+
+  return {
+    pid: primaryProcess.pid,
+    rootPid,
+    processCount: processes.length,
+    rssMb: Number(processes.reduce((sum, process) => sum + process.rssMb, 0).toFixed(2)),
+    cpuPercent: Number(processes.reduce((sum, process) => sum + process.cpuPercent, 0).toFixed(2)),
+    command: primaryProcess.command,
+    processes
+  };
+}
+
+function aggregateProcessTreeSample(rootPid, processes) {
+  return aggregateProcessList(collectProcessTree(rootPid, processes), rootPid);
+}
+
+async function sampleProcessTree(child) {
+  try {
+    const processes = await readProcessTable();
+    const treeSample = aggregateProcessTreeSample(child.pid, processes);
+    const matchingSample = aggregateProcessList(
+      collectMatchingProcesses(processes, child.__benchmarkMatchPatterns ?? []),
+      child.pid
+    );
+
+    if (!treeSample) {
+      return matchingSample;
+    }
+
+    if (!matchingSample) {
+      return treeSample;
+    }
+
+    if (
+      matchingSample.processCount > treeSample.processCount ||
+      matchingSample.rssMb > treeSample.rssMb
+    ) {
+      return matchingSample;
+    }
+
+    return treeSample;
+  } catch {
+    return null;
+  }
 }
 
 function runCommand(command, args) {
@@ -237,9 +357,13 @@ async function resolveExecutablePath(framework) {
   const stagedTar = resolve(stagedDir, basename(config.bundleArchive, ".zst"));
   const stagedAppBundle = resolve(stagedDir, "Desktop Framework Benchmark Electrobun.app");
   const stagedExecutable = resolve(stagedAppBundle, "Contents/MacOS/launcher");
+  const sourcePath = existsSync(config.appBundle) ? config.appBundle : config.bundleArchive;
 
   if (existsSync(stagedExecutable)) {
-    return stagedExecutable;
+    const [stagedStats, sourceStats] = await Promise.all([stat(stagedExecutable), stat(sourcePath)]);
+    if (stagedStats.mtimeMs >= sourceStats.mtimeMs) {
+      return stagedExecutable;
+    }
   }
 
   await rm(stagedDir, { recursive: true, force: true });
@@ -312,12 +436,45 @@ async function waitForCondition({ logFile, child, timeoutMs, predicate }) {
   throw new Error(`Timed out waiting for benchmark condition. Last records: ${JSON.stringify(lastRecords.slice(-5), null, 2)}`);
 }
 
-async function killApp(child) {
-  if (child.exitCode !== null) {
+async function killProcessTree(rootPid, signal = "SIGTERM") {
+  const processes = await readProcessTable().catch(() => []);
+  const tree = collectProcessTree(rootPid, processes)
+    .sort((left, right) => right.pid - left.pid)
+    .map((process) => process.pid);
+
+  for (const pid of tree) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Ignore processes that already exited.
+    }
+  }
+}
+
+async function killMatchingProcesses(patterns, signal = "SIGTERM") {
+  if (!patterns || patterns.length === 0) {
     return;
   }
 
-  child.kill("SIGTERM");
+  const processes = await readProcessTable().catch(() => []);
+  const matching = collectMatchingProcesses(processes, patterns)
+    .sort((left, right) => right.pid - left.pid)
+    .map((process) => process.pid);
+
+  for (const pid of matching) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Ignore processes that already exited.
+    }
+  }
+}
+
+async function killApp(child) {
+  if (child.exitCode === null) {
+    await killProcessTree(child.pid, "SIGTERM");
+  }
+  await killMatchingProcesses(child.__benchmarkMatchPatterns ?? [], "SIGTERM");
 
   const startedAt = Date.now();
   while (child.exitCode === null && Date.now() - startedAt < 3000) {
@@ -325,17 +482,23 @@ async function killApp(child) {
   }
 
   if (child.exitCode === null) {
-    child.kill("SIGKILL");
+    await killProcessTree(child.pid, "SIGKILL");
   }
+  await killMatchingProcesses(child.__benchmarkMatchPatterns ?? [], "SIGKILL");
 }
 
-async function launchApp({ framework, logFile, scenario, automationDelayMs }) {
+async function launchApp({ framework, logFile, scenario, automationDelayMs, heavyTaskIterations }) {
   const config = FRAMEWORKS[framework];
   const executable = await resolveExecutablePath(framework);
+  const processMatchPatterns = [getAppBundlePathFromExecutable(executable)];
 
   if (!existsSync(executable)) {
     throw new Error(`Missing executable for ${framework}: ${executable}`);
   }
+
+  await killMatchingProcesses(processMatchPatterns, "SIGTERM");
+  await sleep(150);
+  await killMatchingProcesses(processMatchPatterns, "SIGKILL");
 
   const env = {
     ...process.env,
@@ -348,6 +511,9 @@ async function launchApp({ framework, logFile, scenario, automationDelayMs }) {
   } else if (scenario === "heavy-task") {
     env.BENCH_AUTOMATION_MODE = "heavy-task";
     env.BENCH_AUTOMATION_DELAY_MS = String(automationDelayMs);
+    if (typeof heavyTaskIterations === "number" && Number.isFinite(heavyTaskIterations)) {
+      env.BENCH_HEAVY_TASK_ITERATIONS = String(heavyTaskIterations);
+    }
   }
 
   const child = spawn(executable, [], {
@@ -355,6 +521,7 @@ async function launchApp({ framework, logFile, scenario, automationDelayMs }) {
     env,
     stdio: "ignore"
   });
+  child.__benchmarkMatchPatterns = processMatchPatterns;
 
   return child;
 }
@@ -375,7 +542,8 @@ async function performWarmup(framework, options, tempDir) {
     framework,
     logFile,
     scenario: "startup",
-    automationDelayMs: options.automationDelayMs
+    automationDelayMs: options.automationDelayMs,
+    heavyTaskIterations: options.heavyTaskIterations
   });
 
   try {
@@ -397,7 +565,8 @@ async function runStartupScenario(framework, options, runDir, runLabel) {
     framework,
     logFile,
     scenario: "startup",
-    automationDelayMs: options.automationDelayMs
+    automationDelayMs: options.automationDelayMs,
+    heavyTaskIterations: options.heavyTaskIterations
   });
 
   try {
@@ -424,7 +593,8 @@ async function runIdleMemoryScenario(framework, options, runDir, runLabel) {
     framework,
     logFile,
     scenario: "idle-memory",
-    automationDelayMs: options.automationDelayMs
+    automationDelayMs: options.automationDelayMs,
+    heavyTaskIterations: options.heavyTaskIterations
   });
 
   try {
@@ -439,7 +609,7 @@ async function runIdleMemoryScenario(framework, options, runDir, runLabel) {
 
     const samples = [];
     for (let index = 0; index < 5; index += 1) {
-      const sample = await sampleProcess(child.pid);
+      const sample = await sampleProcessTree(child);
       if (sample) {
         samples.push(sample);
       }
@@ -467,7 +637,8 @@ async function runHeavyTaskScenario(framework, options, runDir, runLabel) {
     framework,
     logFile,
     scenario: "heavy-task",
-    automationDelayMs: options.automationDelayMs
+    automationDelayMs: options.automationDelayMs,
+    heavyTaskIterations: options.heavyTaskIterations
   });
 
   try {
@@ -484,7 +655,7 @@ async function runHeavyTaskScenario(framework, options, runDir, runLabel) {
     let taskEndRecord = null;
 
     while (Date.now() - startedAt < options.timeoutMs) {
-      const sample = await sampleProcess(child.pid);
+      const sample = await sampleProcessTree(child);
       if (sample) {
         samples.push(sample);
       }

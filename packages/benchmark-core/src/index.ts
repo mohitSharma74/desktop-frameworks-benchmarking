@@ -48,9 +48,11 @@ export interface BenchmarkResult {
 export const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
 export const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
 export const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
+export const BENCH_HEAVY_TASK_ITERATIONS_ENV = "BENCH_HEAVY_TASK_ITERATIONS";
 export const DEFAULT_HEAVY_TASK_ITERATIONS = 30;
 
 export interface BenchmarkAutomationConfig {
   mode: BenchmarkAutomationMode;
   delayMs: number;
+  heavyTaskIterations?: number;
 }

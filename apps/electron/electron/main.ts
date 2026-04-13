@@ -11,6 +11,7 @@ import type { MockApiResponse } from "@benchmark/dataset";
 
 const BENCH_AUTOMATION_MODE_ENV = "BENCH_AUTOMATION_MODE";
 const BENCH_AUTOMATION_DELAY_MS_ENV = "BENCH_AUTOMATION_DELAY_MS";
+const BENCH_HEAVY_TASK_ITERATIONS_ENV = "BENCH_HEAVY_TASK_ITERATIONS";
 const BENCH_OUTPUT_FILE_ENV = "BENCH_OUTPUT_FILE";
 const DATASET_FILE_NAME = "benchmark-dataset.json";
 const MOCK_API_FILE_NAME = "mock-api-response.json";
@@ -60,9 +61,15 @@ function getBenchmarkConfig(): BenchmarkAutomationConfig | null {
     return null;
   }
 
+  const heavyTaskIterations =
+    mode === "heavy-task"
+      ? Number(process.env[BENCH_HEAVY_TASK_ITERATIONS_ENV] ?? "") || undefined
+      : undefined;
+
   return {
     mode,
-    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250")
+    delayMs: Number(process.env[BENCH_AUTOMATION_DELAY_MS_ENV] ?? "250"),
+    heavyTaskIterations
   };
 }
 
