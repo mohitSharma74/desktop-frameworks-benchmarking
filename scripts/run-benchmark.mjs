@@ -172,7 +172,7 @@ function getEventRecord(records, eventName) {
 }
 
 function parseProcessLine(line) {
-  const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+([0-9.]+)\s+(.*)$/);
+  const match = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+([0-9.]+)\s+([0-9:\-.]+)\s+(.*)$/);
   if (!match) {
     return null;
   }
@@ -182,8 +182,31 @@ function parseProcessLine(line) {
     ppid: Number(match[2]),
     rssMb: Number((Number(match[3]) / 1024).toFixed(2)),
     cpuPercent: Number(match[4]),
-    command: match[5]
+    cpuTimeSeconds: parseCpuTime(match[5]),
+    command: match[6]
   };
+}
+
+function parseCpuTime(value) {
+  const [daysPart, clockPart] = value.includes("-") ? value.split("-", 2) : [null, value];
+  const daySeconds = daysPart ? Number(daysPart) * 24 * 60 * 60 : 0;
+  const [left, right] = clockPart.split(".");
+  const fractionalSeconds = right ? Number(`0.${right}`) : 0;
+  const parts = left.split(":").map((part) => Number(part));
+
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+
+  if (parts.length === 3) {
+    [hours, minutes, seconds] = parts;
+  } else if (parts.length === 2) {
+    [minutes, seconds] = parts;
+  } else if (parts.length === 1) {
+    [seconds] = parts;
+  }
+
+  return daySeconds + hours * 60 * 60 + minutes * 60 + seconds + fractionalSeconds;
 }
 
 function getAppBundlePathFromExecutable(executable) {
@@ -196,8 +219,14 @@ function getAppBundlePathFromExecutable(executable) {
   return executable.slice(0, index + ".app".length);
 }
 
+function isWebKitProcess(process) {
+  return process.command.includes("com.apple.WebKit.WebContent") ||
+    process.command.includes("com.apple.WebKit.Networking") ||
+    process.command.includes("com.apple.WebKit.GPU");
+}
+
 async function readProcessTable() {
-  const output = await runCommand("ps", ["-axo", "pid=,ppid=,rss=,%cpu=,command="]);
+  const output = await runCommand("ps", ["-axo", "pid=,ppid=,rss=,%cpu=,time=,command="]);
   return output
     .split("\n")
     .map((line) => parseProcessLine(line))
@@ -244,6 +273,21 @@ function collectMatchingProcesses(processes, patterns) {
   );
 }
 
+function collectNewWebKitProcesses(processes, baselinePids) {
+  return processes.filter(
+    (process) => isWebKitProcess(process) && !baselinePids.has(process.pid)
+  );
+}
+
+function dedupeProcesses(processes) {
+  const unique = new Map();
+  for (const process of processes) {
+    unique.set(process.pid, process);
+  }
+
+  return [...unique.values()];
+}
+
 function aggregateProcessList(processes, rootPid = null) {
   if (processes.length === 0) {
     return null;
@@ -265,11 +309,36 @@ function aggregateProcessList(processes, rootPid = null) {
     pid: primaryProcess.pid,
     rootPid,
     processCount: processes.length,
+    sampledAtMs: Date.now(),
     rssMb: Number(processes.reduce((sum, process) => sum + process.rssMb, 0).toFixed(2)),
     cpuPercent: Number(processes.reduce((sum, process) => sum + process.cpuPercent, 0).toFixed(2)),
+    cpuTimeSeconds: Number(
+      processes.reduce((sum, process) => sum + process.cpuTimeSeconds, 0).toFixed(4)
+    ),
     command: primaryProcess.command,
     processes
   };
+}
+
+function calculateCpuPercentSamples(samples) {
+  const cpuSamples = [];
+
+  for (let index = 1; index < samples.length; index += 1) {
+    const previous = samples[index - 1];
+    const current = samples[index];
+    const elapsedMs = current.sampledAtMs - previous.sampledAtMs;
+    const cpuTimeDeltaSeconds = current.cpuTimeSeconds - previous.cpuTimeSeconds;
+
+    if (elapsedMs <= 0 || cpuTimeDeltaSeconds < 0) {
+      continue;
+    }
+
+    cpuSamples.push(
+      Number(((cpuTimeDeltaSeconds / (elapsedMs / 1000)) * 100).toFixed(2))
+    );
+  }
+
+  return cpuSamples;
 }
 
 function aggregateProcessTreeSample(rootPid, processes) {
@@ -280,8 +349,20 @@ async function sampleProcessTree(child) {
   try {
     const processes = await readProcessTable();
     const treeSample = aggregateProcessTreeSample(child.pid, processes);
+    const matchedProcesses = collectMatchingProcesses(
+      processes,
+      child.__benchmarkMatchPatterns ?? []
+    );
+    const webKitProcesses = collectNewWebKitProcesses(
+      processes,
+      child.__benchmarkBaselineWebKitPids ?? new Set()
+    );
+    for (const process of webKitProcesses) {
+      child.__benchmarkExtraPids.add(process.pid);
+    }
+
     const matchingSample = aggregateProcessList(
-      collectMatchingProcesses(processes, child.__benchmarkMatchPatterns ?? []),
+      dedupeProcesses([...matchedProcesses, ...webKitProcesses]),
       child.pid
     );
 
@@ -470,11 +551,22 @@ async function killMatchingProcesses(patterns, signal = "SIGTERM") {
   }
 }
 
+async function killKnownPids(pids, signal = "SIGTERM") {
+  for (const pid of pids ?? []) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Ignore processes that already exited.
+    }
+  }
+}
+
 async function killApp(child) {
   if (child.exitCode === null) {
     await killProcessTree(child.pid, "SIGTERM");
   }
   await killMatchingProcesses(child.__benchmarkMatchPatterns ?? [], "SIGTERM");
+  await killKnownPids(child.__benchmarkExtraPids, "SIGTERM");
 
   const startedAt = Date.now();
   while (child.exitCode === null && Date.now() - startedAt < 3000) {
@@ -485,12 +577,17 @@ async function killApp(child) {
     await killProcessTree(child.pid, "SIGKILL");
   }
   await killMatchingProcesses(child.__benchmarkMatchPatterns ?? [], "SIGKILL");
+  await killKnownPids(child.__benchmarkExtraPids, "SIGKILL");
 }
 
 async function launchApp({ framework, logFile, scenario, automationDelayMs, heavyTaskIterations }) {
   const config = FRAMEWORKS[framework];
   const executable = await resolveExecutablePath(framework);
   const processMatchPatterns = [getAppBundlePathFromExecutable(executable)];
+  const baselineProcesses = await readProcessTable().catch(() => []);
+  const baselineWebKitPids = new Set(
+    baselineProcesses.filter((process) => isWebKitProcess(process)).map((process) => process.pid)
+  );
 
   if (!existsSync(executable)) {
     throw new Error(`Missing executable for ${framework}: ${executable}`);
@@ -522,6 +619,8 @@ async function launchApp({ framework, logFile, scenario, automationDelayMs, heav
     stdio: "ignore"
   });
   child.__benchmarkMatchPatterns = processMatchPatterns;
+  child.__benchmarkBaselineWebKitPids = baselineWebKitPids;
+  child.__benchmarkExtraPids = new Set();
 
   return child;
 }
@@ -650,6 +749,11 @@ async function runHeavyTaskScenario(framework, options, runDir, runLabel) {
     });
 
     const samples = [];
+    const initialSample = await sampleProcessTree(child);
+    if (initialSample) {
+      samples.push(initialSample);
+    }
+
     const startedAt = Date.now();
     let records = [];
     let taskEndRecord = null;
@@ -673,14 +777,24 @@ async function runHeavyTaskScenario(framework, options, runDir, runLabel) {
       throw new Error(`Timed out waiting for heavy task completion in ${framework}`);
     }
 
+    const cpuPercentSamples = calculateCpuPercentSamples(samples);
+
     return {
       startup: extractStartupMetrics(records),
       memory: {
         peakMb: samples.length > 0 ? Math.max(...samples.map((sample) => sample.rssMb)) : null
       },
       cpu: {
-        averagePercent: samples.length > 0 ? Number((samples.reduce((sum, sample) => sum + sample.cpuPercent, 0) / samples.length).toFixed(2)) : null,
-        peakPercent: samples.length > 0 ? Math.max(...samples.map((sample) => sample.cpuPercent)) : null
+        averagePercent:
+          cpuPercentSamples.length > 0
+            ? Number(
+                (
+                  cpuPercentSamples.reduce((sum, sample) => sum + sample, 0) /
+                  cpuPercentSamples.length
+                ).toFixed(2)
+              )
+            : null,
+        peakPercent: cpuPercentSamples.length > 0 ? Math.max(...cpuPercentSamples) : null
       },
       task: {
         durationMs: taskEndRecord.payload?.durationMs ?? null,
